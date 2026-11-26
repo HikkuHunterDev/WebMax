@@ -1,22 +1,27 @@
 # WebMax
 
-![WebMax](1.png)
+![WebMax](screenshot.jpg)
 
-Заходите в MAX не устанавливая его на свой компьютер.
+Настольное приложение для Windows, которое открывает веб-версию MAX в отдельном окне через WebView2.
 
-## Требуется:
+## Возможности
 
-- C# 10.0
-- .NET 10.0
-- WebView2
+- Отдельное окно для [web.max.ru](https://web.max.ru) на базе WebView2.
+- Системная строка заголовка Windows с тёмным оформлением.
+- Сворачивание в трей при закрытии окна и выход через меню трея.
+- Один экземпляр приложения: повторный запуск активирует уже открытое окно.
+- Горячие клавиши: `Alt+Left` / `Alt+Right`, `F5` / `Ctrl+R`, `Alt+Home`.
 
-## Порядок запуска
+## Требования
 
-1. Скачать `WebMax.exe` из раздела Releases
-2. Установить WebView2 Runtime (при отсутствии)
-3. Запустить `WebMax.exe`
+- Windows 10/11
+- [.NET 10 SDK](https://dotnet.microsoft.com/download) для сборки
+- [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) (обычно уже установлен в Windows)
 
-## Сборка проекта
+## Сборка
 
-```bash
-dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+```powershell
+dotnet publish -c Release
+```
+
+Готовый файл: `bin\Release\net10.0-windows\win-x64\publish\WebMax.exe`
