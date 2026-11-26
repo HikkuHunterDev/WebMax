@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -9,7 +8,7 @@ namespace WebMax
 {
     static class Program
     {
-        [DllImport("user32.dll")]
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern IntPtr FindWindow(string? lpClassName, string lpWindowName);
         
         [DllImport("user32.dll")]
@@ -17,12 +16,20 @@ namespace WebMax
         
         [DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
-        
-        [DllImport("user32.dll")]
-        private static extern int SendMessage(IntPtr hWnd, int Msg, IntPtr wParam, string lParam);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int Msg, IntPtr wParam, ref COPYDATASTRUCT lParam);
         
         private const int SW_RESTORE = 9;
-        private const int WM_USER_OPEN_FILE = 0x0400 + 100;
+        private const int WM_COPYDATA = 0x004A;
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct COPYDATASTRUCT
+        {
+            public IntPtr dwData;
+            public int cbData;
+            public IntPtr lpData;
+        }
 
         [STAThread]
         static void Main(string[] args)
@@ -62,10 +69,30 @@ namespace WebMax
                         // Передаём путь к файлу
                         if (args.Length > 0 && File.Exists(args[0]))
                         {
-                            SendMessage(hWnd, WM_USER_OPEN_FILE, IntPtr.Zero, args[0]);
+                            SendFilePath(hWnd, args[0]);
                         }
                     }
                 }
+            }
+        }
+
+        private static void SendFilePath(IntPtr hWnd, string filePath)
+        {
+            var chars = (filePath.Length + 1) * sizeof(char);
+            var ptr = Marshal.StringToHGlobalUni(filePath);
+            try
+            {
+                var cds = new COPYDATASTRUCT
+                {
+                    dwData = (IntPtr)1,
+                    cbData = chars,
+                    lpData = ptr
+                };
+                SendMessage(hWnd, WM_COPYDATA, IntPtr.Zero, ref cds);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(ptr);
             }
         }
     }

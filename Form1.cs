@@ -13,34 +13,37 @@ namespace WebMax
     public partial class Form1 : Form
     {
         private WebView2? webView = null!;
-        private Panel? titleBar = null!;
-        private Label? titleLabel = null!;
-        private Button? closeButton = null!;
-        private Button? minimizeButton = null!;
-        private Button? backButton = null!;
-        private Button? forwardButton = null!;
-        private Button? refreshButton = null!;
-        private Button? homeButton = null!;
         private NotifyIcon? trayIcon = null!;
         private ContextMenuStrip? trayMenu = null!;
         
         // ДОБАВЛЕНО: поле для хранения файла, если WebView ещё не инициализирован
         private string? pendingFile = null;
 
-        [DllImport("user32.dll")]
-        private static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
-        [DllImport("user32.dll")]
-        private static extern bool ReleaseCapture();
-        
-        private const int WM_NCLBUTTONDOWN = 0xA1;
-        private const int HT_CAPTION = 0x2;
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+        private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+        private const int DWMWA_USE_IMMERSIVE_DARK_MODE_OLD = 19;
+        private const int DWMWA_CAPTION_COLOR = 35;
+        private const int DWMWA_TEXT_COLOR = 36;
+        private const int WM_COPYDATA = 0x004A;
+        private const int WM_APPCOMMAND = 0x0319;
+        private const int APPCOMMAND_BROWSER_BACKWARD = 1;
+        private const int APPCOMMAND_BROWSER_FORWARD = 2;
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct COPYDATASTRUCT
+        {
+            public IntPtr dwData;
+            public int cbData;
+            public IntPtr lpData;
+        }
 
         public Form1()
         {
             InitializeComponent();
             InitializeForm();
             CreateTrayIcon();
-            CreateTitleBar();
             InitializeWebView();
         }
 
@@ -49,9 +52,10 @@ namespace WebMax
             this.Text = "WebMax";
             this.Size = new Size(1280, 800);
             this.StartPosition = FormStartPosition.CenterScreen;
-            this.FormBorderStyle = FormBorderStyle.None;
+            this.FormBorderStyle = FormBorderStyle.Sizable;
             this.BackColor = Color.FromArgb(32, 32, 32);
             this.MinimumSize = new Size(800, 600);
+            this.KeyPreview = true;
             
             // При закрытии - сворачиваем в трей
             this.FormClosing += Form1_FormClosing;
@@ -66,6 +70,35 @@ namespace WebMax
             }
             catch { }
         }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            ApplySystemTitleBarTheme();
+        }
+
+        private void ApplySystemTitleBarTheme()
+        {
+            if (!IsHandleCreated) return;
+
+            try
+            {
+                int dark = 1;
+                DwmSetWindowAttribute(Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref dark, sizeof(int));
+                DwmSetWindowAttribute(Handle, DWMWA_USE_IMMERSIVE_DARK_MODE_OLD, ref dark, sizeof(int));
+
+                int caption = ColorToColorRef(Color.FromArgb(32, 32, 32));
+                int text = ColorToColorRef(Color.FromArgb(240, 240, 240));
+                DwmSetWindowAttribute(Handle, DWMWA_CAPTION_COLOR, ref caption, sizeof(int));
+                DwmSetWindowAttribute(Handle, DWMWA_TEXT_COLOR, ref text, sizeof(int));
+            }
+            catch
+            {
+                // На старых версиях Windows DWM-атрибуты могут быть недоступны.
+            }
+        }
+
+        private static int ColorToColorRef(Color color) => color.R | (color.G << 8) | (color.B << 16);
 
         private void CreateTrayIcon()
         {
@@ -148,151 +181,11 @@ namespace WebMax
             Application.Exit();
         }
 
-        private void CreateTitleBar()
-        {
-            titleBar = new Panel
-            {
-                Height = 45,
-                Dock = DockStyle.Top,
-                BackColor = Color.FromArgb(45, 45, 48)
-            };
-
-            titleLabel = new Label
-            {
-                Text = "WebMax",
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 10, FontStyle.Regular),
-                Location = new Point(140, 12),
-                AutoSize = true
-            };
-
-            backButton = CreateImageButton("back.png", 10, 10, 25, 25);
-            backButton.Click += (s, e) => 
-            { 
-                if (webView?.CoreWebView2?.CanGoBack == true) 
-                    webView.CoreWebView2.GoBack(); 
-            };
-
-            forwardButton = CreateImageButton("forward.png", 40, 10, 25, 25);
-            forwardButton.Click += (s, e) => 
-            { 
-                if (webView?.CoreWebView2?.CanGoForward == true) 
-                    webView.CoreWebView2.GoForward(); 
-            };
-
-            refreshButton = CreateImageButton("refresh.png", 70, 10, 25, 25);
-            refreshButton.Click += (s, e) => webView?.Reload();
-
-            homeButton = CreateImageButton("home.png", 100, 10, 25, 25);
-            homeButton.Click += (s, e) => webView?.CoreWebView2?.Navigate("https://web.max.ru");
-
-            minimizeButton = CreateImageButton("minimize.png", this.Width - 80, 10, 25, 25);
-            minimizeButton.Click += (s, e) => this.WindowState = FormWindowState.Minimized;
-
-            closeButton = CreateImageButton("close.png", this.Width - 45, 10, 25, 25);
-            closeButton.Click += (s, e) => this.Close();
-            closeButton.MouseEnter += (s, e) => closeButton.BackColor = Color.FromArgb(232, 17, 35);
-            closeButton.MouseLeave += (s, e) => closeButton.BackColor = Color.Transparent;
-
-            titleBar.Controls.AddRange(new Control[] 
-            { 
-                backButton, forwardButton, refreshButton, homeButton,
-                titleLabel, minimizeButton, closeButton 
-            });
-
-            titleBar.MouseDown += (s, e) => 
-            {
-                if (e.Button == MouseButtons.Left)
-                {
-                    ReleaseCapture();
-                    SendMessage(this.Handle, WM_NCLBUTTONDOWN, HT_CAPTION, 0);
-                }
-            };
-            
-            titleLabel.MouseDown += (s, e) => 
-            {
-                if (e.Button == MouseButtons.Left)
-                {
-                    ReleaseCapture();
-                    SendMessage(this.Handle, WM_NCLBUTTONDOWN, HT_CAPTION, 0);
-                }
-            };
-
-            this.Controls.Add(titleBar);
-        }
-
-        private Button CreateImageButton(string resourceName, int x, int y, int width, int height)
-        {
-            Button button = new Button
-            {
-                FlatStyle = FlatStyle.Flat,
-                FlatAppearance = { BorderSize = 0 },
-                BackColor = Color.Transparent,
-                Size = new Size(width, height),
-                Location = new Point(x, y),
-                Text = "",
-                ImageAlign = ContentAlignment.MiddleCenter,
-                Cursor = Cursors.Hand
-            };
-
-            try
-            {
-                using var stream = GetEmbeddedResource(resourceName);
-                if (stream != null)
-                {
-                    button.Image = new Bitmap(stream);
-                    button.Image = new Bitmap(button.Image, new Size(16, 16));
-                }
-                else
-                {
-                    button.Text = GetFallbackSymbol(resourceName);
-                    button.ForeColor = Color.White;
-                    button.Font = new Font("Segoe UI", 8);
-                    button.TextAlign = ContentAlignment.MiddleCenter;
-                }
-            }
-            catch
-            {
-                button.Text = GetFallbackSymbol(resourceName);
-                button.ForeColor = Color.White;
-                button.Font = new Font("Segoe UI", 8);
-                button.TextAlign = ContentAlignment.MiddleCenter;
-            }
-
-            button.MouseEnter += (s, e) => 
-            {
-                if (button != closeButton)
-                    button.BackColor = Color.FromArgb(70, 70, 70);
-            };
-            button.MouseLeave += (s, e) => 
-            {
-                if (button != closeButton)
-                    button.BackColor = Color.Transparent;
-            };
-
-            return button;
-        }
-
         private Stream? GetEmbeddedResource(string name)
         {
             var assembly = Assembly.GetExecutingAssembly();
             var resourcePath = $"WebMax.{name}";
             return assembly.GetManifestResourceStream(resourcePath);
-        }
-
-        private string GetFallbackSymbol(string resourceName)
-        {
-            string filename = Path.GetFileNameWithoutExtension(resourceName).ToLower();
-            return filename switch
-            {
-                "back" => "◀",
-                "forward" => "▶",
-                "refresh" => "↻",
-                "home" => "⌂",
-                "minimize" => "─",
-                "close" => "✕",
-                _ => "●"
-            };
         }
 
         private async void InitializeWebView()
@@ -319,16 +212,57 @@ namespace WebMax
             try
             {
                 await webView.EnsureCoreWebView2Async(env);
-                webView.CoreWebView2.Navigate("https://web.max.ru");
-                
+
+                webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
+
                 webView.CoreWebView2.DocumentTitleChanged += (s, e) =>
                 {
                     this.Invoke(new Action(() =>
                     {
-                        if (titleLabel != null)
-                            titleLabel.Text = webView.CoreWebView2.DocumentTitle ?? "WebMax";
+                        this.Text = webView.CoreWebView2.DocumentTitle ?? "WebMax";
                     }));
                 };
+
+                webView.CoreWebView2.NavigationStarting += (s, e) =>
+                {
+                };
+
+                webView.CoreWebView2.NavigationCompleted += (s, e) =>
+                {
+                };
+
+                webView.CoreWebView2.SourceChanged += (s, e) =>
+                {
+                };
+
+                webView.CoreWebView2.StatusBarTextChanged += (s, e) =>
+                {
+                    var text = webView.CoreWebView2.StatusBarText;
+                };
+
+                webView.CoreWebView2.NewWindowRequested += (s, e) =>
+                {
+                    var uri = e.Uri;
+                    if (Uri.TryCreate(uri, UriKind.Absolute, out var parsed) &&
+                        (parsed.Scheme == Uri.UriSchemeHttp || parsed.Scheme == Uri.UriSchemeHttps))
+                    {
+                        e.Handled = true;
+                        webView.CoreWebView2.Navigate(uri);
+                    }
+                };
+
+                webView.CoreWebView2.PermissionRequested += (s, e) =>
+                {
+                    // Для мессенджера удобнее автоматически разрешать типовые разрешения.
+                    if (e.PermissionKind == CoreWebView2PermissionKind.Notifications ||
+                        e.PermissionKind == CoreWebView2PermissionKind.Microphone ||
+                        e.PermissionKind == CoreWebView2PermissionKind.Camera)
+                    {
+                        e.State = CoreWebView2PermissionState.Allow;
+                    }
+                };
+
+                webView.CoreWebView2.Navigate("https://web.max.ru");
                 
                 // ДОБАВЛЕНО: если есть файл в очереди - открываем его
                 if (!string.IsNullOrEmpty(pendingFile))
@@ -344,14 +278,33 @@ namespace WebMax
             }
         }
 
-        protected override void OnResize(EventArgs e)
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
-            base.OnResize(e);
-            if (minimizeButton != null && closeButton != null)
+            if (keyData == (Keys.Alt | Keys.Left) || keyData == Keys.BrowserBack)
             {
-                minimizeButton.Location = new Point(this.Width - 80, 10);
-                closeButton.Location = new Point(this.Width - 45, 10);
+                if (webView?.CoreWebView2?.CanGoBack == true) webView.CoreWebView2.GoBack();
+                return true;
             }
+
+            if (keyData == (Keys.Alt | Keys.Right) || keyData == Keys.BrowserForward)
+            {
+                if (webView?.CoreWebView2?.CanGoForward == true) webView.CoreWebView2.GoForward();
+                return true;
+            }
+
+            if (keyData == Keys.F5 || keyData == (Keys.Control | Keys.R))
+            {
+                webView?.Reload();
+                return true;
+            }
+
+            if (keyData == (Keys.Alt | Keys.Home))
+            {
+                webView?.CoreWebView2?.Navigate("https://web.max.ru");
+                return true;
+            }
+
+            return base.ProcessCmdKey(ref msg, keyData);
         }
 
         // ============= ДОБАВЛЕННЫЕ МЕТОДЫ ДЛЯ РАБОТЫ С ФАЙЛАМИ =============
@@ -372,20 +325,49 @@ namespace WebMax
         }
 
         /// <summary>
-        /// Переопределение обработки сообщений Windows (для приёма файлов из другого процесса)
+        /// Обработка сообщений Windows (межпроцессная передача файлов, мышиные кнопки назад/вперёд).
         /// </summary>
         protected override void WndProc(ref Message m)
         {
-            const int WM_USER_OPEN_FILE = 0x0400 + 100;
-            
-            if (m.Msg == WM_USER_OPEN_FILE)
+            if (m.Msg == WM_COPYDATA)
             {
-                string? filePath = m.LParam.ToString();
-                if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath))
+                try
                 {
-                    OpenFileInWebView(filePath);
+                    var cds = Marshal.PtrToStructure<COPYDATASTRUCT>(m.LParam);
+                    if (cds.lpData != IntPtr.Zero && cds.cbData > 0)
+                    {
+                        var filePath = Marshal.PtrToStringUni(cds.lpData);
+                        if (!string.IsNullOrWhiteSpace(filePath) && File.Exists(filePath))
+                        {
+                            OpenFileInWebView(filePath);
+                        }
+                    }
                 }
+                catch
+                {
+                    // Игнорируем некорректные межпроцессные сообщения
+                }
+
+                base.WndProc(ref m);
                 return;
+            }
+
+            if (m.Msg == WM_APPCOMMAND)
+            {
+                var command = (int)((m.LParam.ToInt64() >> 16) & 0xFFF);
+                if (command == APPCOMMAND_BROWSER_BACKWARD && webView?.CoreWebView2?.CanGoBack == true)
+                {
+                    webView.CoreWebView2.GoBack();
+                    m.Result = (IntPtr)1;
+                    return;
+                }
+
+                if (command == APPCOMMAND_BROWSER_FORWARD && webView?.CoreWebView2?.CanGoForward == true)
+                {
+                    webView.CoreWebView2.GoForward();
+                    m.Result = (IntPtr)1;
+                    return;
+                }
             }
             
             base.WndProc(ref m);

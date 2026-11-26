@@ -5,11 +5,15 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>ico.ico</ApplicationIcon>
     
     <!-- Эти настройки упакуют всё в один EXE -->
     <PublishSingleFile>true</PublishSingleFile>
-    <SelfContained>false</SelfContained>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <DebugType>embedded</DebugType>
     <PublishReadyToRun>false</PublishReadyToRun>
   </PropertyGroup>
@@ -20,11 +24,5 @@
   
   <ItemGroup>
     <EmbeddedResource Include="ico.ico" />
-    <EmbeddedResource Include="back.png" />
-    <EmbeddedResource Include="forward.png" />
-    <EmbeddedResource Include="refresh.png" />
-    <EmbeddedResource Include="home.png" />
-    <EmbeddedResource Include="minimize.png" />
-    <EmbeddedResource Include="close.png" />
   </ItemGroup>
 </Project>
